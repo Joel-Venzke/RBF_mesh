@@ -28,7 +28,13 @@ class Node_Set:
         if self.rbf_order < 3 or self.rbf_order % 2 != 1:
             exit("RBF order must be >3 and odd")
         print "Creating Node Set"
-        self.node_set, self.weights = self.create_node_set()
+        self.node_set, self.boundary_nodes, self.weights = self.create_node_set(
+        )
+        print self.node_set.shape, self.boundary_nodes.shape
+        self.full_node_set = np.concatenate(
+            [self.node_set, self.boundary_nodes])
+        # used for testing only. do not uncomment
+        # self.full_node_set = self.node_set
         self.radius = np.sqrt((self.node_set**2).sum(axis=1))
         self.theta = np.angle(self.node_set[:, 2] + 1.0j * np.sqrt(
             (self.node_set[:, :2]**2).sum(axis=1)))
@@ -161,9 +167,10 @@ class Node_Set:
         print "Match radius:", match_radius, self.get_average_spacing(
             shell_nodes * match_radius)
         self.node_set = []
+        rotation_matrix = None
         for r in np.arange(self.delta_r / 2.0, self.r_max + self.delta_r / 2.0,
                            self.delta_r):
-            if r > match_radius:
+            if r >= match_radius:
                 current_shell = shell_nodes * r
                 rotation_matrix = self.rand_rotation_matrix()
                 current_shell[:, :3] = np.transpose(
@@ -171,11 +178,27 @@ class Node_Set:
                 #TODO: handle weights (account for radius (r integration) and expanding surface area)
                 self.node_set.append(current_shell)
         self.node_set = np.concatenate(self.node_set)
-        return self.node_set[:, :3], self.node_set[:, 3]
+
+        boundary_degree = min(165, self.md_degree * 1)
+        num_points_boundary_shell = (boundary_degree + 1)**2
+        boundary_shell_nodes = np.loadtxt(
+            self.node_set_dir + "/md" + str(boundary_degree).zfill(3) + "." +
+            str(num_points_boundary_shell).zfill(5) + ".txt")
+        r = self.r_max + self.delta_r / 2.0
+        current_shell = boundary_shell_nodes * r
+        # rotate boundary nodes the same as previous shell
+        current_shell[:, :3] = np.transpose(
+            rotation_matrix.dot(np.transpose(current_shell[:, :3])))
+        #trim weights as they are not needed for the boundary
+        self.boundary_nodes = current_shell[:, :3]
+        return self.node_set[:, :3], self.boundary_nodes, self.node_set[:, 3]
 
     def get_nearest_neighbors(self):
-        tree = KDTree(self.node_set)
-        return tree.query(self.node_set, k=self.stencil_size)
+        tree = KDTree(self.full_node_set)
+        nearest_dist, nearest_idx = tree.query(
+            self.full_node_set, k=self.stencil_size)
+        return nearest_dist[:self.node_set.shape[
+            0]], nearest_idx[:self.node_set.shape[0]]
 
     def get_nearest_neighbors_from_set(self, node_set, k):
         tree = KDTree(node_set)
@@ -185,20 +208,40 @@ class Node_Set:
         return radius**self.rbf_order
 
     def get_row_and_col(self):
+        # allocate space
         row_col_set = np.zeros(
             (self.laplace_weights.shape[0] * self.laplace_weights.shape[1], 2))
         current_idx = 0
         for row_idx in self.nearest_idx:
+            # fill row index (first entry returned by kdTree)
             row_col_set[current_idx:current_idx + row_idx.shape[0],
                         0] = row_idx[0]
+            # fill col index (the array returned by kdTree)
             row_col_set[current_idx:current_idx + row_idx.shape[0],
                         1] = row_idx
+            # update index
             current_idx += row_idx.shape[0]
         return row_col_set.transpose()
+
+    def create_opperator_matrix(self, weights):
+        weights = weights.reshape((weights.shape[0] * weights.shape[1], ))
+        row_col = self.get_row_and_col()
+        row_less_than = row_col[0] < self.node_set.shape[0]
+        weights = weights[row_less_than]
+        row_col = row_col[:, row_less_than]
+        col_less_than = row_col[1] < self.node_set.shape[0]
+        weights = weights[col_less_than]
+        row_col = row_col[:, col_less_than]
+        matrix = csr_matrix(
+            (weights, row_col),
+            shape=(self.node_set.shape[0], self.node_set.shape[0]))
+        return matrix
 
     def calculate_opperator_weights(self):
         print "Calculating operator weights"
         self.laplace_weights = np.zeros(self.nearest_idx.shape)
+        self.first_derivative_weights = np.zeros(
+            [self.nearest_idx.shape[0], self.nearest_idx.shape[1], 3])
 
         num_poly_terms = comb(self.poly_order + 3, 3, exact=True)
 
@@ -206,27 +249,46 @@ class Node_Set:
             if idx % int(self.nearest_idx.shape[0] / 10) == 0:
                 print ".",
             # shift nodes to origin
-            node_list = self.node_set[node_list_idx]
+            node_list = self.full_node_set[node_list_idx]
             node_list_shifted = node_list - node_list[0]
 
             matrix_size = self.stencil_size + num_poly_terms + self.exp_order
 
             # create A matrix and right hand side
             A_matrix = np.zeros((matrix_size, matrix_size))
-            right_hand_side = np.zeros((matrix_size))
+            laplace_rhs = np.zeros((matrix_size))
+            first_derivative_rhs = np.zeros((matrix_size, 3))
 
             # fill normal A matrix
             for node_idx, row_node in enumerate(node_list_shifted):
+                # A_matrix
                 A_matrix[node_idx, :self.stencil_size] = self.rbf_phi(
                     np.sqrt(((node_list_shifted - row_node)**2).sum(axis=1)))
-                right_hand_side[node_idx] = self.rbf_order * (
-                    self.rbf_order + 3.0 - 2.0) * np.sqrt(
-                        ((row_node)**2).sum())**(self.rbf_order - 2)
+
+                # save computational time
+                derivative_term_rbf = np.sqrt(
+                    ((row_node)**2).sum())**(self.rbf_order - 2)
+                # laplacian right hand side
+                laplace_rhs[node_idx] = self.rbf_order * (
+                    self.rbf_order + 3.0 - 2.0) * derivative_term_rbf
+                # first_deriviative right hand side
+                first_derivative_rhs[node_idx, 0] = self.rbf_order * (
+                    -row_node[0]) * derivative_term_rbf
+                first_derivative_rhs[node_idx, 1] = self.rbf_order * (
+                    -row_node[1]) * derivative_term_rbf
+                first_derivative_rhs[node_idx, 2] = self.rbf_order * (
+                    -row_node[2]) * derivative_term_rbf
 
             # add poly
             for poly_idx in np.arange(num_poly_terms):
                 if poly_idx == 4 or poly_idx == 6 or poly_idx == 9:
-                    right_hand_side[self.stencil_size + poly_idx] = 2.0
+                    laplace_rhs[self.stencil_size + poly_idx] = 2.0
+                if poly_idx == 1:
+                    first_derivative_rhs[self.stencil_size + poly_idx, 0] = 1.0
+                if poly_idx == 2:
+                    first_derivative_rhs[self.stencil_size + poly_idx, 1] = 1.0
+                if poly_idx == 3:
+                    first_derivative_rhs[self.stencil_size + poly_idx, 2] = 1.0
             A_matrix[:self.stencil_size, self.stencil_size:
                      self.stencil_size + num_poly_terms] = self.get_poly_terms(
                          node_list_shifted, self.poly_order)
@@ -239,10 +301,24 @@ class Node_Set:
             # add exp (use unshifted distance)
             for a in np.arange(1, self.exp_order + 1):
                 node_list_radius = np.sqrt(((node_list)**2).sum(axis=1))
-                right_hand_side[matrix_size
-                                - self.exp_order - 1 + a] = a * a * np.exp(
-                                    -a * node_list_radius[0]
-                                ) - 2.0 * a / node_list_radius[0]
+                laplace_rhs[
+                    matrix_size - self.exp_order - 1 + a] = a * a * np.exp(
+                        -a * node_list_radius[0]) - 2.0 * a * np.exp(
+                            -a * node_list_radius[0]) / node_list_radius[0]
+
+                first_derivative_rhs[
+                    matrix_size - self.exp_order - 1 +
+                    a, 0] = a * node_list[0, 0] * np.exp(
+                        -a * node_list_radius[0]) / node_list_radius[0]
+                first_derivative_rhs[
+                    matrix_size - self.exp_order - 1 +
+                    a, 1] = a * node_list[0, 1] * np.exp(
+                        -a * node_list_radius[0]) / node_list_radius[0]
+                first_derivative_rhs[
+                    matrix_size - self.exp_order - 1 +
+                    a, 2] = a * node_list[0, 2] * np.exp(
+                        -a * node_list_radius[0]) / node_list_radius[0]
+
                 exp_row = np.exp(-a * node_list_radius)
                 A_matrix[:self.stencil_size, matrix_size - self.exp_order - 1 +
                          a] = exp_row
@@ -250,15 +326,60 @@ class Node_Set:
                          self.stencil_size] = exp_row
 
             # solve and store node weights (drop poly and exp terms)
-            weights = np.linalg.solve(A_matrix, right_hand_side)
-            self.laplace_weights[idx, :] = weights[:self.stencil_size]
+            # try:
+            #     weights = np.linalg.solve(A_matrix, laplace_rhs)
+            # except:
+            #     print node_list
+            #     print node_list_shifted
+            #     exit()
+            # self.laplace_weights[idx, :] = weights[:self.stencil_size]
+            # print "we try"
+            # print first_derivative_rhs[:, 0]
+            # print "laplace"
+            # weights = np.linalg.solve(A_matrix, laplace_rhs)
+            # print "dx"
+            # weights = np.linalg.solve(A_matrix, first_derivative_rhs[:, 0])
+            # print "dy"
+            # weights = np.linalg.solve(A_matrix, first_derivative_rhs[:, 1])
+            # print "dz"
+            # weights = np.linalg.solve(A_matrix, first_derivative_rhs[:, 2])
+            # try:
+            # print laplace_rhs.reshape((laplace_rhs.shape[0], 1)).shape
+            # print first_derivative_rhs.shape
+            # print np.concatenate(
+            #     (laplace_rhs.reshape((laplace_rhs.shape[0], 1)),
+            #      first_derivative_rhs),
+            #     axis=1)
+            weights = np.linalg.solve(A_matrix,
+                                      np.concatenate(
+                                          (laplace_rhs.reshape(
+                                              (laplace_rhs.shape[0], 1)),
+                                           first_derivative_rhs),
+                                          axis=1))
+            # except:
+            #     print node_list
+            #     print node_list_shifted
+            #     exit()
+            self.laplace_weights[idx, :] = weights[:self.stencil_size, 0]
+            self.first_derivative_weights[idx, :,
+                                          0] = weights[:self.stencil_size, 1]
+            self.first_derivative_weights[idx, :,
+                                          1] = weights[:self.stencil_size, 2]
+            self.first_derivative_weights[idx, :,
+                                          2] = weights[:self.stencil_size, 3]
         print
-        self.laplace = csr_matrix(
-            (self.laplace_weights.reshape((self.laplace_weights.shape[0] *
-                                           self.laplace_weights.shape[1], )),
-             self.get_row_and_col()),
-            shape=(self.node_set.shape[0], self.node_set.shape[0]))
-        print self.laplace
+        self.laplace = self.create_opperator_matrix(self.laplace_weights)
+        self.first_deriviative = []
+        self.first_deriviative.append(
+            self.create_opperator_matrix(self.first_derivative_weights[:, :,
+                                                                       0]))
+        self.first_deriviative.append(
+            self.create_opperator_matrix(self.first_derivative_weights[:, :,
+                                                                       1]))
+        self.first_deriviative.append(
+            self.create_opperator_matrix(self.first_derivative_weights[:, :,
+                                                                       2]))
+        # print self.laplace
 
     def check_quality(self):
         print "Calculating Quality of Node Set"
