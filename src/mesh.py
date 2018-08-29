@@ -13,7 +13,7 @@ import sys
 
 
 def hydrogen(node):
-    return -1.0 / np.sqrt((node**2).sum())
+    return -1.0 / np.sqrt((node**2).sum()) + 0.05 * node[0]
 
 
 def SAE(node):
@@ -58,20 +58,22 @@ def SAE(node):
 # and Z in the nuclear charge (Z = c_0+z_c for SAE since they are both 1/r at small r)
 # float(sys.argv[1])
 node_set = Node_Set(
-    r_max=10,
-    delta_r=1.0,
-    md_degree=5,
+    r_max=25,
+    delta_r=0.3,
+    md_degree=10,
     rbf_order=7,
-    poly_order=3,
-    exp_order=3.0 / 18.0,
-    stencil_size=56,
+    poly_order=2,
+    exp_order=0.0,
+    stencil_size=64,
     ecs_size=5,
+    hyperviscosity_order=8,
     save=True,
     quiet=False)
 
 y_floor = 1e-60
 y_min = np.log10(y_floor)
 y_max = 10
+epslion = 1e-3
 
 # print "Plotting matrix"
 # plt.hist2d(
@@ -252,17 +254,12 @@ y_max = 10
 # plt.xlabel("index")
 # plt.show()
 # print "Calculating Target"
-k = 30
-target = -0.577
-ham = node_set.apply_potential(-node_set.laplace / 2.0, SAE)
-eig_val, eig_vec = eigs(ham, k=k, which="SR")
-ground_state_idx = np.argmin(np.abs(eig_val.real - target))
-print node_set.delta_r, node_set.md_degree, node_set.node_set.shape[
-    0], ground_state_idx, 100 * (
-        eig_val[max(ground_state_idx - 1, 0):ground_state_idx + 2].real -
-        target) / abs(target)
-# print
-# print
+# k = 1035
+# target = -0.5
+# ham = node_set.apply_potential(
+#     1.0j * node_set.laplace * epslion - node_set.laplace / 2.0, hydrogen)
+# eig_val, eig_vec = eigs(ham, k=k, which="SR")
+# ground_state_idx = np.argmin(np.abs(eig_val.real - target))
 # if ground_state_idx != 0:
 #     eig_val = eig_val[ground_state_idx:]
 #     eig_vec = eig_vec[:, ground_state_idx:]
@@ -281,8 +278,7 @@ print node_set.delta_r, node_set.md_degree, node_set.node_set.shape[
 # for i in np.arange(1, k + 1):
 #     n = i**2
 #     if idx + n <= k:
-#         print "Energies n=" + str(i) + ":", -0.5 / i**2, eig_val[idx:
-#                                                                  idx + n].real
+#         print "Energies n=" + str(i) + ":", -0.5 / i**2, eig_val[idx:idx + n]
 #     idx = idx + n
 # print
 
@@ -292,13 +288,45 @@ print node_set.delta_r, node_set.md_degree, node_set.node_set.shape[
 #     np.sum(np.conjugate(ground_state) * node_set.weights * ground_state))
 # print "norm", np.sum(
 #     np.conjugate(ground_state) * node_set.weights * ground_state)
-# print "<r> error:", 1 - np.sum(
+# print "<r>k error:", 1 - np.sum(
 #     np.conjugate(ground_state) * node_set.weights *
 #     np.sqrt(node_set.node_set[:, 0]**2 + node_set.node_set[:, 1]**2 +
 #             node_set.node_set[:, 2]**2) * ground_state).real
 
 # print
 # print
+k = 50
+ham = node_set.apply_potential(-node_set.laplace / 2.0, hydrogen)
+eig_val, eig_vec = eigs(ham, k=k, which="SR")
+print np.max(eig_val.imag)
+
+print eig_vec.shape
+
+for e_val in eig_val:
+    print e_val.real, "\t", e_val.imag
+
+plt.scatter(eig_val.real, eig_val.imag)
+# plt.ylim([-10, 10])
+plt.show()
+print
+print
+
+k = 50
+ham = node_set.apply_potential(
+    1.0j * node_set.laplace * epslion - node_set.laplace / 2.0, hydrogen)
+eig_val, eig_vec = eigs(ham, k=k, which="SR")
+print np.max(eig_val.imag)
+
+print eig_vec.shape
+
+for e_val in eig_val:
+    print e_val.real, "\t", e_val.imag
+
+plt.scatter(eig_val.real, eig_val.imag)
+# plt.ylim([-10, 10])
+plt.show()
+print
+print
 
 # ham = node_set.apply_potential(-node_set.laplace_ecs / 2.0, hydrogen)
 # eig_val, eig_vec = eigs(ham, k=k, which="SR")

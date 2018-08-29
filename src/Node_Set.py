@@ -7,6 +7,7 @@ from scipy.sparse import csr_matrix
 import sobol_seq
 import sys
 from scipy.linalg import toeplitz, pascal
+from scipy.special import eval_genlaguerre
 from numpy.matlib import repmat
 import h5py
 
@@ -21,6 +22,7 @@ class Node_Set:
                  poly_order=3,
                  exp_order=1,
                  ecs_size=5,
+                 hyperviscosity_order=8,
                  save=True,
                  quiet=False,
                  node_set_dir="/Users/jvenzke/Repos/RBF_mesh/MD_node_sets"):
@@ -34,6 +36,7 @@ class Node_Set:
         self.rbf_order = rbf_order
         self.poly_order = poly_order
         self.exp_order = exp_order
+        self.hyperviscosity_order = hyperviscosity_order
         self.node_set_dir = node_set_dir
         self.ecs_size = ecs_size
 
@@ -47,6 +50,7 @@ class Node_Set:
             print "poly_order:\t" + str(self.poly_order)
             print "exp_order:\t" + str(self.exp_order)
             print "stencil_size:\t" + str(self.stencil_size)
+            print "hyperviscosity_order:\t" + str(self.hyperviscosity_order)
             print "node_set_dir:\t" + str(self.node_set_dir)
             print
 
@@ -69,6 +73,7 @@ class Node_Set:
             print "Getting Nearest Neighbors"
         self.nearest_dist, self.nearest_idx = self.get_nearest_neighbors()
         self.calculate_operator_weights()
+        self.calculate_hyperviscosity_weights()
         if save:
             self.save_node_set()
         if not self.quiet:
@@ -371,6 +376,9 @@ class Node_Set:
     def rbf_phi(self, radius):
         return radius**self.rbf_order
 
+    def rbf_phi_gauss(self, radius, epslion):
+        return np.exp(-(epslion * radius)**2.0)
+
     def get_row_and_col(self):
         # allocate space
         row_col_set = np.zeros(
@@ -452,24 +460,11 @@ class Node_Set:
                 # laplacian right hand side
                 laplace_rhs[node_idx] = self.rbf_order * (
                     self.rbf_order + 3.0 - 2.0) * derivative_term_rbf
-                # first_deriviative right hand side
-                first_derivative_rhs[node_idx, 0] = self.rbf_order * (
-                    -row_node[0]) * derivative_term_rbf
-                first_derivative_rhs[node_idx, 1] = self.rbf_order * (
-                    -row_node[1]) * derivative_term_rbf
-                first_derivative_rhs[node_idx, 2] = self.rbf_order * (
-                    -row_node[2]) * derivative_term_rbf
 
             # add poly
             for poly_idx in np.arange(num_poly_terms):
                 if poly_idx == 4 or poly_idx == 6 or poly_idx == 9:
                     laplace_rhs[self.stencil_size + poly_idx] = 2.0
-                if poly_idx == 1:
-                    first_derivative_rhs[self.stencil_size + poly_idx, 0] = 1.0
-                if poly_idx == 2:
-                    first_derivative_rhs[self.stencil_size + poly_idx, 1] = 1.0
-                if poly_idx == 3:
-                    first_derivative_rhs[self.stencil_size + poly_idx, 2] = 1.0
             A_matrix[:self.stencil_size, self.stencil_size:
                      self.stencil_size + num_poly_terms] = self.get_poly_terms(
                          node_list_shifted, self.poly_order)
@@ -490,27 +485,12 @@ class Node_Set:
                     -a * node_list_radius[0]) - 2.0 * a * np.exp(
                         -a * node_list_radius[0]) / node_list_radius[0]
 
-                first_derivative_rhs[
-                    matrix_size - 1, 0] = a * node_list[0, 0] * np.exp(
-                        -a * node_list_radius[0]) / node_list_radius[0]
-                first_derivative_rhs[
-                    matrix_size - 1, 1] = a * node_list[0, 1] * np.exp(
-                        -a * node_list_radius[0]) / node_list_radius[0]
-                first_derivative_rhs[
-                    matrix_size - 1, 2] = a * node_list[0, 2] * np.exp(
-                        -a * node_list_radius[0]) / node_list_radius[0]
-
                 exp_row = np.exp(-a * node_list_radius)
                 A_matrix[:self.stencil_size, matrix_size - 1] = exp_row
                 A_matrix[matrix_size - 1, :self.stencil_size] = exp_row
 
             try:
-                weights = np.linalg.solve(A_matrix,
-                                          np.concatenate(
-                                              (laplace_rhs.reshape(
-                                                  (laplace_rhs.shape[0], 1)),
-                                               first_derivative_rhs),
-                                              axis=1))
+                weights = np.linalg.solve(A_matrix, laplace_rhs)
             except:
                 print "Error in calculating weights"
                 print cur_radius
@@ -519,13 +499,65 @@ class Node_Set:
                 print self.stencil_size + num_poly_terms
                 print A_matrix
                 exit()
-            self.laplace_weights[idx, :] = weights[:self.stencil_size, 0]
+            self.laplace_weights[idx, :] = weights[:self.stencil_size]
+
+            matrix_size = self.stencil_size + num_poly_terms
+
+            # create A matrix and right hand side
+            A_matrix = np.zeros((matrix_size, matrix_size))
+            laplace_rhs = np.zeros((matrix_size))
+            first_derivative_rhs = np.zeros((matrix_size, 3))
+
+            # fill normal A matrix
+            for node_idx, row_node in enumerate(node_list_shifted):
+                # A_matrix
+                A_matrix[node_idx, :self.stencil_size] = self.rbf_phi(
+                    np.sqrt(((node_list_shifted - row_node)**2).sum(axis=1)))
+
+                # save computational time
+                derivative_term_rbf = np.sqrt(
+                    ((row_node)**2).sum())**(self.rbf_order - 2)
+                # first_deriviative right hand side
+                first_derivative_rhs[node_idx, 0] = self.rbf_order * (
+                    -row_node[0]) * derivative_term_rbf
+                first_derivative_rhs[node_idx, 1] = self.rbf_order * (
+                    -row_node[1]) * derivative_term_rbf
+                first_derivative_rhs[node_idx, 2] = self.rbf_order * (
+                    -row_node[2]) * derivative_term_rbf
+
+            # add poly
+            for poly_idx in np.arange(num_poly_terms):
+                if poly_idx == 1:
+                    first_derivative_rhs[self.stencil_size + poly_idx, 0] = 1.0
+                if poly_idx == 2:
+                    first_derivative_rhs[self.stencil_size + poly_idx, 1] = 1.0
+                if poly_idx == 3:
+                    first_derivative_rhs[self.stencil_size + poly_idx, 2] = 1.0
+            A_matrix[:self.stencil_size, self.stencil_size:
+                     self.stencil_size + num_poly_terms] = self.get_poly_terms(
+                         node_list_shifted, self.poly_order)
+            A_matrix[self.stencil_size:self.stencil_size + num_poly_terms, :
+                     self.stencil_size] = A_matrix[:self.stencil_size,
+                                                   self.stencil_size:
+                                                   self.stencil_size +
+                                                   num_poly_terms].transpose()
+
+            try:
+                weights = np.linalg.solve(A_matrix, first_derivative_rhs)
+            except:
+                print "Error in calculating weights"
+                print cur_radius
+                print matrix_size
+                print self.stencil_size + num_poly_terms + self.exp_order
+                print self.stencil_size + num_poly_terms
+                print A_matrix
+                exit()
             self.first_derivative_weights[idx, :,
-                                          0] = weights[:self.stencil_size, 1]
+                                          0] = weights[:self.stencil_size, 0]
             self.first_derivative_weights[idx, :,
-                                          1] = weights[:self.stencil_size, 2]
+                                          1] = weights[:self.stencil_size, 1]
             self.first_derivative_weights[idx, :,
-                                          2] = weights[:self.stencil_size, 3]
+                                          2] = weights[:self.stencil_size, 2]
 
             # now for the ECS version
             A_matrix_ecs = np.zeros(
@@ -603,6 +635,115 @@ class Node_Set:
             self.create_operator_matrix(self.first_derivative_weights[:, :,
                                                                       2]))
 
+    def get_epslion(self):
+        target_cond = 1e10
+        epslion_high = 1e3
+        epslion_low = 1e-3
+        cond_low = target_cond
+        cond_high = target_cond
+        condtion_number = 1.0
+
+        # shift nodes to origin
+        node_list = self.full_node_set[self.nearest_idx[0]]
+        node_list_shifted = node_list - node_list[0]
+        matrix_size = self.stencil_size
+
+        # create A matrix and right hand side
+        A_matrix = np.zeros((matrix_size, matrix_size))
+        hyperviscosity_rhs = np.zeros((matrix_size))
+
+        # set up low epsilon
+        while cond_low >= target_cond:
+            epslion = epslion_low
+            # fill normal A matrix
+            for node_idx, row_node in enumerate(node_list_shifted):
+                r = np.sqrt(((node_list_shifted - row_node)**2).sum(axis=1))
+                # A_matrix
+                A_matrix[node_idx, :self.stencil_size] = self.rbf_phi_gauss(
+                    r, epslion)
+            cond_low = np.linalg.cond(A_matrix)
+            if cond_low >= target_cond:
+                epslion_low *= 10.0
+
+        # set up low epsilon
+        while cond_high <= target_cond:
+            epslion = epslion_high
+            # fill normal A matrix
+            for node_idx, row_node in enumerate(node_list_shifted):
+                r = np.sqrt(((node_list_shifted - row_node)**2).sum(axis=1))
+                # A_matrix
+                A_matrix[node_idx, :self.stencil_size] = self.rbf_phi_gauss(
+                    r, epslion)
+            cond_high = np.linalg.cond(A_matrix)
+            if cond_high <= target_cond:
+                epslion_high /= 10.0
+
+        while np.abs(condtion_number - target_cond) / target_cond > 1e-3:
+            epslion = (epslion_high + epslion_low) / 2.0
+            # fill normal A matrix
+            for node_idx, row_node in enumerate(node_list_shifted):
+                r = np.sqrt(((node_list_shifted - row_node)**2).sum(axis=1))
+                # A_matrix
+                A_matrix[node_idx, :self.stencil_size] = self.rbf_phi_gauss(
+                    r, epslion)
+            condtion_number = np.linalg.cond(A_matrix)
+            if condtion_number >= target_cond:
+                epslion_high = epslion
+            else:
+                epslion_low = epslion
+            print epslion, condtion_number
+        return epslion / self.nearest_dist[0, 1]
+
+    def calculate_hyperviscosity_weights(self):
+        self.hyperviscosity_weights = np.zeros(self.nearest_idx.shape)
+        base_epslion = self.get_epslion()
+
+        for idx, node_list_idx in enumerate(self.nearest_idx):
+            if (idx + 1) % int(self.nearest_idx.shape[0] / 10) == 0:
+                if not self.quiet:
+                    print ".",
+                    sys.stdout.flush()
+            # shift nodes to origin
+            node_list = self.full_node_set[node_list_idx]
+            node_list_shifted = node_list - node_list[0]
+            matrix_size = self.stencil_size
+
+            # create A matrix and right hand side
+            A_matrix = np.zeros((matrix_size, matrix_size))
+            hyperviscosity_rhs = np.zeros((matrix_size))
+
+            epslion = base_epslion * self.nearest_dist[idx, 1]
+
+            # fill normal A matrix
+            for node_idx, row_node in enumerate(node_list_shifted):
+                r = np.sqrt(((node_list_shifted - row_node)**2).sum(axis=1))
+                # A_matrix
+                A_matrix[node_idx, :self.stencil_size] = self.rbf_phi_gauss(
+                    r, epslion)
+
+                # laplacian right hand side
+                hyperviscosity_rhs[node_idx] = epslion**(
+                    2.0 * self.hyperviscosity_order) * eval_genlaguerre(
+                        self.hyperviscosity_order, 1.0,
+                        np.sqrt((row_node**2).sum())) * self.rbf_phi_gauss(
+                            np.sqrt((row_node**2).sum()), epslion)
+
+            try:
+                weights = np.linalg.solve(A_matrix, hyperviscosity_rhs)
+            except:
+                print "Error in calculating weights"
+                print cur_radius
+                print matrix_size
+                print self.stencil_size + num_poly_terms + self.exp_order
+                print self.stencil_size + num_poly_terms
+                print A_matrix
+                exit()
+            self.hyperviscosity_weights[idx, :] = weights[:self.stencil_size]
+        if not self.quiet:
+            print
+        self.hyperviscosity = self.create_operator_matrix(
+            self.hyperviscosity_weights)
+
     def save_node_set(self):
         row_col = self.laplace.nonzero()
         sparserows = row_col[0]
@@ -665,12 +806,12 @@ class Node_Set:
         grp_operators = file.create_group("operators")
         dset = file.create_dataset(
             "operators/row_idx", (sparserows.shape[0], ),
-            dtype='float64',
+            dtype='int32',
             chunks=True)
         dset[:] = sparserows
         dset = file.create_dataset(
             "operators/col_idx", (sparserows.shape[0], ),
-            dtype='float64',
+            dtype='int32',
             chunks=True)
         dset[:] = sparsecols
         dset = file.create_dataset(
@@ -679,16 +820,19 @@ class Node_Set:
             chunks=True)
         dset[:] = self.laplace[sparserows, sparsecols]
         dset = file.create_dataset(
-            "operators/laplace_ecs", (sparserows.shape[0], 2),
+            "operators/laplace_ecs_real", (sparserows.shape[0], ),
             dtype='float64',
             chunks=True)
-        real_data = np.array(
+        dset[:] = np.array(
             self.laplace_ecs[sparserows, sparsecols].real).reshape(
                 (sparserows.shape[0], ))
-        imag_data = np.array(
+        dset = file.create_dataset(
+            "operators/laplace_ecs_imag", (sparserows.shape[0], ),
+            dtype='float64',
+            chunks=True)
+        dset[:] = np.array(
             self.laplace_ecs[sparserows, sparsecols].imag).reshape(
                 (sparserows.shape[0], ))
-        dset[:] = np.array(zip(real_data, imag_data))
         dset = file.create_dataset(
             "operators/dx", (sparserows.shape[0], ),
             dtype='float64',
@@ -704,6 +848,11 @@ class Node_Set:
             dtype='float64',
             chunks=True)
         dset[:] = self.first_deriviative[2][sparserows, sparsecols]
+        dset = file.create_dataset(
+            "operators/hyperviscosity", (sparserows.shape[0], ),
+            dtype='float64',
+            chunks=True)
+        dset[:] = self.hyperviscosity[sparserows, sparsecols]
 
         grp_parameters = file.create_group("parameters")
         dset = file.create_dataset(
@@ -730,6 +879,12 @@ class Node_Set:
         dset = file.create_dataset(
             "parameters/stencil_size", (1, ), dtype='float64', chunks=True)
         dset[:] = self.stencil_size
+        dset = file.create_dataset(
+            "parameters/num_nodes", (1, ), dtype='float64', chunks=True)
+        dset[:] = self.node_set.shape[0]
+        dset = file.create_dataset(
+            "parameters/num_operators", (1, ), dtype='float64', chunks=True)
+        dset[:] = sparserows.shape[0]
 
     def check_quality(self):
         print "Calculating Quality of Node Set"
