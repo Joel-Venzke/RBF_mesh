@@ -13,6 +13,20 @@ import h5py
 
 
 class Node_Set:
+    """
+    A class used to represent an Animal
+
+    ...
+
+    Attributes
+    ----------
+    TODO
+
+    Methods
+    -------
+    TODO
+    """
+
     def __init__(self,
                  r_max=100,
                  delta_r=0.5,
@@ -26,6 +40,39 @@ class Node_Set:
                  save=True,
                  quiet=False,
                  node_set_dir="/Users/jvenzke/Repos/RBF_mesh/MD_node_sets"):
+        """
+        Parameters
+        ----------
+        r_max : float
+            Grid max radius (default is 100)
+        delta_r : float
+            The grid spacing (default is 0.5)
+        stencil_size : int
+            The number of points in a stencil (default is 56)
+        md_degree : int
+            The order of the MD node set. Similar to spherical harmonic l value.
+            (default is 8)
+        rbf_order : int
+            Order of the  polyharmonic spline (PHS) RBF. Must be odd. (default is 7)
+        poly_order : int
+            The highest order polynomial attached to the stencil. (default is 3)
+        exp_order : float
+            Attaching exp(-r/exp_order). Ignored if zero. (default is 1)
+        ecs_size : float
+            Size of the ECS on the outer portion of the grid (default is 5)
+        hyperviscosity_order : int
+            Hyper viscosity order to allow control over nonphysical eigen values
+            (default is 8)
+        save : bool
+            If the operators and node set should be saved to an HDF5 file.
+            (default is True)
+        quiet : bool
+            Allows for the standard out to be turned off when set to True
+            (default is False)
+        node_set_dir : str
+            The directory where the MD node set files are saved.
+            (default is "/Users/jvenzke/Repos/RBF_mesh/MD_node_sets")
+        """
         self.quiet = quiet
         if not self.quiet:
             print "Creating Node Set"
@@ -56,6 +103,7 @@ class Node_Set:
 
         if self.rbf_order < 3 or self.rbf_order % 2 != 1:
             exit("RBF order must be >3 and odd")
+        # self.create_node_set_cartesian()
         self.create_node_set()
         self.full_node_set = np.concatenate(
             [self.node_set, self.boundary_nodes])
@@ -280,8 +328,6 @@ class Node_Set:
         average_spacing = self.get_average_spacing(shell_nodes)
         match_radius = self.delta_r / average_spacing
         r_ecs = self.r_max - self.ecs_size
-        box_radius = self.delta_r * np.ceil(
-            match_radius / self.delta_r) + self.delta_r / 2.0
         if not self.quiet:
             print "Average spacing on unit sphere:", average_spacing
             print "Match radius:", match_radius
@@ -361,6 +407,72 @@ class Node_Set:
         self.weights = self.node_set[:, 3]
         self.node_set = self.node_set[:, :3]
         self.node_set_ecs = self.node_set_ecs[:, :3]
+
+    # it appears that midpoint rule works better than Gregory
+    def create_node_set_cartesian(self, quadrature_order=1):
+        # read in md node set on shell
+        r_ecs = self.r_max - self.ecs_size
+        box_size = self.delta_r * np.floor(
+            self.r_max / self.delta_r) + self.delta_r / 2.0
+        if not self.quiet:
+            print "Creating Cartesian node set"
+
+        if r_ecs < 0.0:
+            exit(
+                "ERROR: the ECS is to close to the center. r_ecs < match_radius"
+            )
+        self.node_set = []
+        self.node_set_ecs = []
+
+        for x in np.arange(-box_size, box_size + self.delta_r, self.delta_r):
+            for y in np.arange(-box_size, box_size + self.delta_r,
+                               self.delta_r):
+                for z in np.arange(-box_size, box_size + self.delta_r,
+                                   self.delta_r):
+                    current_node = [x, y, z, 1.0]
+                    self.node_set.append(current_node)
+                    self.node_set_ecs.append(
+                        np.array(current_node, dtype='complex'))
+        self.node_set = np.array(self.node_set)
+        self.node_set_ecs = np.array(self.node_set_ecs)
+
+        self.boundary_nodes = []
+        self.boundary_nodes_ecs = []
+        for x in [-box_size - self.delta_r, box_size + self.delta_r]:
+            for y in np.arange(-box_size, box_size + self.delta_r,
+                               self.delta_r):
+                for z in np.arange(-box_size, box_size + self.delta_r,
+                                   self.delta_r):
+                    current_node = [x, y, z]
+                    self.boundary_nodes.append(current_node)
+                    self.boundary_nodes_ecs.append(
+                        np.array(current_node, dtype='complex'))
+        for x in np.arange(-box_size, box_size + self.delta_r, self.delta_r):
+            for y in [-box_size - self.delta_r, box_size + self.delta_r]:
+                for z in np.arange(-box_size, box_size + self.delta_r,
+                                   self.delta_r):
+                    current_node = [x, y, z]
+                    self.boundary_nodes.append(current_node)
+                    self.boundary_nodes_ecs.append(
+                        np.array(current_node, dtype='complex'))
+        for x in np.arange(-box_size, box_size + self.delta_r, self.delta_r):
+            for y in np.arange(-box_size, box_size + self.delta_r,
+                               self.delta_r):
+                for z in [-box_size - self.delta_r, box_size + self.delta_r]:
+                    current_node = [x, y, z]
+                    self.boundary_nodes.append(current_node)
+                    self.boundary_nodes_ecs.append(
+                        np.array(current_node, dtype='complex'))
+        # trim weights as they are not needed for the boundary
+        self.boundary_nodes = np.array(self.boundary_nodes)
+        self.boundary_nodes_ecs = np.array(self.boundary_nodes_ecs)
+        # clean up arrays for use in the rest of the code
+        self.weights = self.node_set[:, 3]
+        self.node_set = self.node_set[:, :3]
+        self.node_set_ecs = self.node_set_ecs[:, :3]
+
+        print self.node_set.shape
+        print self.boundary_nodes.shape
 
     def get_nearest_neighbors(self):
         tree = KDTree(self.full_node_set)
@@ -696,51 +808,55 @@ class Node_Set:
 
     def calculate_hyperviscosity_weights(self):
         self.hyperviscosity_weights = np.zeros(self.nearest_idx.shape)
-        base_epslion = self.get_epslion()
+        if self.hyperviscosity_order > 0:
+            base_epslion = self.get_epslion()
 
-        for idx, node_list_idx in enumerate(self.nearest_idx):
-            if (idx + 1) % int(self.nearest_idx.shape[0] / 10) == 0:
-                if not self.quiet:
-                    print ".",
-                    sys.stdout.flush()
-            # shift nodes to origin
-            node_list = self.full_node_set[node_list_idx]
-            node_list_shifted = node_list - node_list[0]
-            matrix_size = self.stencil_size
+            for idx, node_list_idx in enumerate(self.nearest_idx):
+                if (idx + 1) % int(self.nearest_idx.shape[0] / 10) == 0:
+                    if not self.quiet:
+                        print ".",
+                        sys.stdout.flush()
+                # shift nodes to origin
+                node_list = self.full_node_set[node_list_idx]
+                node_list_shifted = node_list - node_list[0]
+                matrix_size = self.stencil_size
 
-            # create A matrix and right hand side
-            A_matrix = np.zeros((matrix_size, matrix_size))
-            hyperviscosity_rhs = np.zeros((matrix_size))
+                # create A matrix and right hand side
+                A_matrix = np.zeros((matrix_size, matrix_size))
+                hyperviscosity_rhs = np.zeros((matrix_size))
 
-            epslion = base_epslion * self.nearest_dist[idx, 1]
+                epslion = base_epslion * self.nearest_dist[idx, 1]
 
-            # fill normal A matrix
-            for node_idx, row_node in enumerate(node_list_shifted):
-                r = np.sqrt(((node_list_shifted - row_node)**2).sum(axis=1))
-                # A_matrix
-                A_matrix[node_idx, :self.stencil_size] = self.rbf_phi_gauss(
-                    r, epslion)
+                # fill normal A matrix
+                for node_idx, row_node in enumerate(node_list_shifted):
+                    r = np.sqrt(((node_list_shifted - row_node)**2).sum(
+                        axis=1))
+                    # A_matrix
+                    A_matrix[node_idx, :
+                             self.stencil_size] = self.rbf_phi_gauss(
+                                 r, epslion)
 
-                # laplacian right hand side
-                hyperviscosity_rhs[node_idx] = epslion**(
-                    2.0 * self.hyperviscosity_order) * eval_genlaguerre(
-                        self.hyperviscosity_order, 1.0,
-                        np.sqrt((row_node**2).sum())) * self.rbf_phi_gauss(
-                            np.sqrt((row_node**2).sum()), epslion)
+                    # laplacian right hand side
+                    hyperviscosity_rhs[node_idx] = epslion**(
+                        2.0 * self.hyperviscosity_order) * eval_genlaguerre(
+                            self.hyperviscosity_order, 1.0,
+                            np.sqrt((row_node**2).sum())) * self.rbf_phi_gauss(
+                                np.sqrt((row_node**2).sum()), epslion)
 
-            try:
-                weights = np.linalg.solve(A_matrix, hyperviscosity_rhs)
-            except:
-                print "Error in calculating weights"
-                print cur_radius
-                print matrix_size
-                print self.stencil_size + num_poly_terms + self.exp_order
-                print self.stencil_size + num_poly_terms
-                print A_matrix
-                exit()
-            self.hyperviscosity_weights[idx, :] = weights[:self.stencil_size]
-        if not self.quiet:
-            print
+                try:
+                    weights = np.linalg.solve(A_matrix, hyperviscosity_rhs)
+                except:
+                    print "Error in calculating weights"
+                    print cur_radius
+                    print matrix_size
+                    print self.stencil_size + num_poly_terms + self.exp_order
+                    print self.stencil_size + num_poly_terms
+                    print A_matrix
+                    exit()
+                self.hyperviscosity_weights[
+                    idx, :] = weights[:self.stencil_size]
+            if not self.quiet:
+                print
         self.hyperviscosity = self.create_operator_matrix(
             self.hyperviscosity_weights)
 
