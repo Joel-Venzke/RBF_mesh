@@ -26,7 +26,6 @@ class Node_Set:
     -------
     TODO
     """
-
     def __init__(self,
                  r_max=100,
                  delta_r=0.5,
@@ -75,7 +74,7 @@ class Node_Set:
         """
         self.quiet = quiet
         if not self.quiet:
-            print "Creating Node Set"
+            print("Creating Node Set")
         self.r_max = r_max
         self.delta_r = delta_r
         self.md_degree = md_degree
@@ -88,18 +87,18 @@ class Node_Set:
         self.ecs_size = ecs_size
 
         if not self.quiet:
-            print
-            print "r_max:\t\t" + str(self.r_max)
-            print "delta_r:\t" + str(self.delta_r)
-            print "ecs_size:\t" + str(self.ecs_size)
-            print "md_degree:\t" + str(self.md_degree)
-            print "rbf_order:\t" + str(self.rbf_order)
-            print "poly_order:\t" + str(self.poly_order)
-            print "exp_order:\t" + str(self.exp_order)
-            print "stencil_size:\t" + str(self.stencil_size)
-            print "hyperviscosity_order:\t" + str(self.hyperviscosity_order)
-            print "node_set_dir:\t" + str(self.node_set_dir)
-            print
+            print()
+            print("r_max:\t\t" + str(self.r_max))
+            print("delta_r:\t" + str(self.delta_r))
+            print("ecs_size:\t" + str(self.ecs_size))
+            print("md_degree:\t" + str(self.md_degree))
+            print("rbf_order:\t" + str(self.rbf_order))
+            print("poly_order:\t" + str(self.poly_order))
+            print("exp_order:\t" + str(self.exp_order))
+            print("stencil_size:\t" + str(self.stencil_size))
+            print("hyperviscosity_order:\t" + str(self.hyperviscosity_order))
+            print("node_set_dir:\t" + str(self.node_set_dir))
+            print()
 
         if self.rbf_order < 3 or self.rbf_order % 2 != 1:
             exit("RBF order must be >3 and odd")
@@ -112,20 +111,20 @@ class Node_Set:
         # used for testing only. do not uncomment
         # self.full_node_set = self.node_set
         self.radius = np.sqrt((self.node_set**2).sum(axis=1))
-        self.theta = np.angle(self.node_set[:, 2] + 1.0j * np.sqrt(
-            (self.node_set[:, :2]**2).sum(axis=1)))
+        self.theta = np.angle(self.node_set[:, 2] + 1.0j *
+                              np.sqrt((self.node_set[:, :2]**2).sum(axis=1)))
         self.phi = np.angle(self.node_set[:, 0] + 1.0j * self.node_set[:, 1])
         self.num_nodes = self.node_set.shape[0]
         if not self.quiet:
-            print "Number of nodes:", self.num_nodes
-            print "Getting Nearest Neighbors"
+            print("Number of nodes:", self.num_nodes)
+            print("Getting Nearest Neighbors")
         self.nearest_dist, self.nearest_idx = self.get_nearest_neighbors()
         self.calculate_operator_weights()
         self.calculate_hyperviscosity_weights()
         if save:
             self.save_node_set()
         if not self.quiet:
-            print "Node set complete"
+            print("Node set complete")
 
     # based on http://slideflix.net/doc/4183369/gregory-s-quadrature-method
     # pages 4-5 (accessed: 2018)
@@ -207,22 +206,24 @@ class Node_Set:
             return poly_set
         else:
             # get the array [1, x, x^2, ..., x^(poly_order)] for this dim
-            current_dim_poly = self.get_poly_terms(
-                nodes[:, -1].reshape((nodes.shape[0], 1)),
-                poly_order,
-                dtype=dtype)
+            current_dim_poly = self.get_poly_terms(nodes[:, -1].reshape(
+                (nodes.shape[0], 1)),
+                                                   poly_order,
+                                                   dtype=dtype)
             # get the array [1, x, y, ..., x^2, xy, y^2, ..., z^2, ..., x^(poly_order)]
-            lower_dim_poly = self.get_poly_terms(
-                nodes[:, :-1], poly_order, dtype=dtype)
+            lower_dim_poly = self.get_poly_terms(nodes[:, :-1],
+                                                 poly_order,
+                                                 dtype=dtype)
             # number of poly terms in this dimension
-            num_poly_terms = comb(
-                poly_order + current_dim, current_dim, exact=True)
+            num_poly_terms = comb(poly_order + current_dim,
+                                  current_dim,
+                                  exact=True)
             # allocate array
             poly_set = np.zeros((nodes.shape[0], num_poly_terms), dtype=dtype)
             # populate new array
             col = 0
-            for poly_deg in range(
-                    0, poly_order + 2):  # loop over all poly degrees
+            for poly_deg in range(0, poly_order +
+                                  2):  # loop over all poly degrees
                 for cur_degree in range(0, poly_deg):  # loop over poly degrees
                     # find upper and lower bound for dim-1 poly list
                     lower_dim_poly_upper_idx = comb(
@@ -240,8 +241,8 @@ class Node_Set:
                              col_offset] = lower_dim_poly[:,
                                                           lower_dim_poly_lower_idx:
                                                           lower_dim_poly_upper_idx] * current_dim_poly[:, cur_degree].reshape(
-                                                              (current_dim_poly.
-                                                               shape[0], 1))
+                                                              (current_dim_poly
+                                                               .shape[0], 1))
                     # update index location
                     col += col_offset
             return poly_set
@@ -266,8 +267,8 @@ class Node_Set:
                          [-sin_theta, 0.0, cos_theta]])
 
     def rotation_matrix_aline_z(self, theta, phi):
-        return np.matmul(
-            self.rotation_matrix_y(-theta), self.rotation_matrix_z(-phi))
+        return np.matmul(self.rotation_matrix_y(-theta),
+                         self.rotation_matrix_z(-phi))
 
     def get_average_spacing(self, node_set):
         nearest_dist, nearest_idx = self.get_nearest_neighbors_from_set(
@@ -329,8 +330,8 @@ class Node_Set:
         match_radius = self.delta_r / average_spacing
         r_ecs = self.r_max - self.ecs_size
         if not self.quiet:
-            print "Average spacing on unit sphere:", average_spacing
-            print "Match radius:", match_radius
+            print("Average spacing on unit sphere:", average_spacing)
+            print("Match radius:", match_radius)
 
         if r_ecs < match_radius:
             exit(
@@ -362,11 +363,13 @@ class Node_Set:
                 current_md_degree = self.get_md_degree(r)
                 num_points_per_shell = (current_md_degree + 1)**2
                 current_shell = r * np.loadtxt(
-                    self.node_set_dir + "/md" + str(current_md_degree).zfill(3)
-                    + "." + str(num_points_per_shell).zfill(5) + ".txt")
+                    self.node_set_dir + "/md" +
+                    str(current_md_degree).zfill(3) + "." +
+                    str(num_points_per_shell).zfill(5) + ".txt")
                 current_shell_ecs = r * np.loadtxt(
-                    self.node_set_dir + "/md" + str(current_md_degree).zfill(3)
-                    + "." + str(num_points_per_shell).zfill(5) + ".txt")
+                    self.node_set_dir + "/md" +
+                    str(current_md_degree).zfill(3) + "." +
+                    str(num_points_per_shell).zfill(5) + ".txt")
             # get random numbers
             random_numbers, seed = sobol_seq.i4_sobol(3, seed)
             # rotate shells to sample theta and phi evenly
@@ -415,7 +418,7 @@ class Node_Set:
         box_size = self.delta_r * np.floor(
             self.r_max / self.delta_r) + self.delta_r / 2.0
         if not self.quiet:
-            print "Creating Cartesian node set"
+            print("Creating Cartesian node set")
 
         if r_ecs < 0.0:
             exit(
@@ -471,15 +474,15 @@ class Node_Set:
         self.node_set = self.node_set[:, :3]
         self.node_set_ecs = self.node_set_ecs[:, :3]
 
-        print self.node_set.shape
-        print self.boundary_nodes.shape
+        print(self.node_set.shape)
+        print(self.boundary_nodes.shape)
 
     def get_nearest_neighbors(self):
         tree = KDTree(self.full_node_set)
-        nearest_dist, nearest_idx = tree.query(
-            self.full_node_set, k=self.stencil_size)
-        return nearest_dist[:self.node_set.shape[
-            0]], nearest_idx[:self.node_set.shape[0]]
+        nearest_dist, nearest_idx = tree.query(self.full_node_set,
+                                               k=self.stencil_size)
+        return nearest_dist[:self.node_set.
+                            shape[0]], nearest_idx[:self.node_set.shape[0]]
 
     def get_nearest_neighbors_from_set(self, node_set, k):
         tree = KDTree(node_set)
@@ -523,10 +526,10 @@ class Node_Set:
 
     def calculate_operator_weights(self):
         if not self.quiet:
-            print "Calculating operator weights"
+            print("Calculating operator weights")
         self.laplace_weights = np.zeros(self.nearest_idx.shape)
-        self.laplace_weights_ecs = np.zeros(
-            self.nearest_idx.shape, dtype='complex')
+        self.laplace_weights_ecs = np.zeros(self.nearest_idx.shape,
+                                            dtype='complex')
         self.first_derivative_weights = np.zeros(
             [self.nearest_idx.shape[0], self.nearest_idx.shape[1], 3])
 
@@ -535,8 +538,7 @@ class Node_Set:
         for idx, node_list_idx in enumerate(self.nearest_idx):
             if (idx + 1) % int(self.nearest_idx.shape[0] / 10) == 0:
                 if not self.quiet:
-                    print ".",
-                    sys.stdout.flush()
+                    print(".")
             # shift nodes to origin
             node_list = self.full_node_set[node_list_idx]
             node_list_shifted = node_list - node_list[0]
@@ -577,14 +579,14 @@ class Node_Set:
             for poly_idx in np.arange(num_poly_terms):
                 if poly_idx == 4 or poly_idx == 6 or poly_idx == 9:
                     laplace_rhs[self.stencil_size + poly_idx] = 2.0
-            A_matrix[:self.stencil_size, self.stencil_size:
-                     self.stencil_size + num_poly_terms] = self.get_poly_terms(
+            A_matrix[:self.stencil_size, self.stencil_size:self.stencil_size +
+                     num_poly_terms] = self.get_poly_terms(
                          node_list_shifted, self.poly_order)
-            A_matrix[self.stencil_size:self.stencil_size + num_poly_terms, :
-                     self.stencil_size] = A_matrix[:self.stencil_size,
-                                                   self.stencil_size:
-                                                   self.stencil_size +
-                                                   num_poly_terms].transpose()
+            A_matrix[
+                self.stencil_size:self.stencil_size + num_poly_terms, :self.
+                stencil_size] = A_matrix[:self.stencil_size,
+                                         self.stencil_size:self.stencil_size +
+                                         num_poly_terms].transpose()
 
             # add exp (use unshifted distance)
             # only add one exp since our nodes are at very few values of r
@@ -604,12 +606,12 @@ class Node_Set:
             try:
                 weights = np.linalg.solve(A_matrix, laplace_rhs)
             except:
-                print "Error in calculating weights"
-                print cur_radius
-                print matrix_size
-                print self.stencil_size + num_poly_terms + self.exp_order
-                print self.stencil_size + num_poly_terms
-                print A_matrix
+                print("Error in calculating weights")
+                print(cur_radius)
+                print(matrix_size)
+                print(self.stencil_size + num_poly_terms + self.exp_order)
+                print(self.stencil_size + num_poly_terms)
+                print(A_matrix)
                 exit()
             self.laplace_weights[idx, :] = weights[:self.stencil_size]
 
@@ -630,12 +632,15 @@ class Node_Set:
                 derivative_term_rbf = np.sqrt(
                     ((row_node)**2).sum())**(self.rbf_order - 2)
                 # first_deriviative right hand side
-                first_derivative_rhs[node_idx, 0] = self.rbf_order * (
-                    -row_node[0]) * derivative_term_rbf
-                first_derivative_rhs[node_idx, 1] = self.rbf_order * (
-                    -row_node[1]) * derivative_term_rbf
-                first_derivative_rhs[node_idx, 2] = self.rbf_order * (
-                    -row_node[2]) * derivative_term_rbf
+                first_derivative_rhs[
+                    node_idx,
+                    0] = self.rbf_order * (-row_node[0]) * derivative_term_rbf
+                first_derivative_rhs[
+                    node_idx,
+                    1] = self.rbf_order * (-row_node[1]) * derivative_term_rbf
+                first_derivative_rhs[
+                    node_idx,
+                    2] = self.rbf_order * (-row_node[2]) * derivative_term_rbf
 
             # add poly
             for poly_idx in np.arange(num_poly_terms):
@@ -645,24 +650,24 @@ class Node_Set:
                     first_derivative_rhs[self.stencil_size + poly_idx, 1] = 1.0
                 if poly_idx == 3:
                     first_derivative_rhs[self.stencil_size + poly_idx, 2] = 1.0
-            A_matrix[:self.stencil_size, self.stencil_size:
-                     self.stencil_size + num_poly_terms] = self.get_poly_terms(
+            A_matrix[:self.stencil_size, self.stencil_size:self.stencil_size +
+                     num_poly_terms] = self.get_poly_terms(
                          node_list_shifted, self.poly_order)
-            A_matrix[self.stencil_size:self.stencil_size + num_poly_terms, :
-                     self.stencil_size] = A_matrix[:self.stencil_size,
-                                                   self.stencil_size:
-                                                   self.stencil_size +
-                                                   num_poly_terms].transpose()
+            A_matrix[
+                self.stencil_size:self.stencil_size + num_poly_terms, :self.
+                stencil_size] = A_matrix[:self.stencil_size,
+                                         self.stencil_size:self.stencil_size +
+                                         num_poly_terms].transpose()
 
             try:
                 weights = np.linalg.solve(A_matrix, first_derivative_rhs)
             except:
-                print "Error in calculating weights"
-                print cur_radius
-                print matrix_size
-                print self.stencil_size + num_poly_terms + self.exp_order
-                print self.stencil_size + num_poly_terms
-                print A_matrix
+                print("Error in calculating weights")
+                print(cur_radius)
+                print(matrix_size)
+                print(self.stencil_size + num_poly_terms + self.exp_order)
+                print(self.stencil_size + num_poly_terms)
+                print(A_matrix)
                 exit()
             self.first_derivative_weights[idx, :,
                                           0] = weights[:self.stencil_size, 0]
@@ -672,16 +677,16 @@ class Node_Set:
                                           2] = weights[:self.stencil_size, 2]
 
             # now for the ECS version
-            A_matrix_ecs = np.zeros(
-                (matrix_size, matrix_size), dtype='complex')
+            A_matrix_ecs = np.zeros((matrix_size, matrix_size),
+                                    dtype='complex')
             laplace_ecs_rhs = np.zeros((matrix_size), dtype='complex')
 
             # fill normal A matrix
             for node_idx, row_node in enumerate(node_list_shifted_ecs):
                 # A_matrix
                 A_matrix_ecs[node_idx, :self.stencil_size] = self.rbf_phi(
-                    np.sqrt(((node_list_shifted_ecs - row_node)**2).sum(
-                        axis=1)))
+                    np.sqrt(
+                        ((node_list_shifted_ecs - row_node)**2).sum(axis=1)))
 
                 # save computational time
                 derivative_term_rbf = np.sqrt(
@@ -694,8 +699,9 @@ class Node_Set:
             for poly_idx in np.arange(num_poly_terms):
                 if poly_idx == 4 or poly_idx == 6 or poly_idx == 9:
                     laplace_ecs_rhs[self.stencil_size + poly_idx] = 2.0
-            A_matrix_ecs[:self.stencil_size, self.stencil_size:self.
-                         stencil_size + num_poly_terms] = self.get_poly_terms(
+            A_matrix_ecs[:self.stencil_size,
+                         self.stencil_size:self.stencil_size +
+                         num_poly_terms] = self.get_poly_terms(
                              node_list_shifted_ecs,
                              self.poly_order,
                              dtype='complex')
@@ -723,16 +729,16 @@ class Node_Set:
             try:
                 weights = np.linalg.solve(A_matrix_ecs, laplace_ecs_rhs)
             except:
-                print "Error in calculating weights ECS"
-                print cur_radius
-                print matrix_size
-                print self.stencil_size + num_poly_terms + self.exp_order
-                print self.stencil_size + num_poly_terms
-                print A_matrix
+                print("Error in calculating weights ECS")
+                print(cur_radius)
+                print(matrix_size)
+                print(self.stencil_size + num_poly_terms + self.exp_order)
+                print(self.stencil_size + num_poly_terms)
+                print(A_matrix)
                 exit()
             self.laplace_weights_ecs[idx, :] = weights[:self.stencil_size]
         if not self.quiet:
-            print
+            print()
         self.laplace = self.create_operator_matrix(self.laplace_weights)
         self.laplace_ecs = self.create_operator_matrix(
             self.laplace_weights_ecs)
@@ -790,6 +796,7 @@ class Node_Set:
             if cond_high <= target_cond:
                 epslion_high /= 10.0
 
+        # binary search for best epsilon
         while np.abs(condtion_number - target_cond) / target_cond > 1e-3:
             epslion = (epslion_high + epslion_low) / 2.0
             # fill normal A matrix
@@ -803,7 +810,8 @@ class Node_Set:
                 epslion_high = epslion
             else:
                 epslion_low = epslion
-            print epslion, condtion_number
+            if not self.quiet:
+                print(epslion, condtion_number)
         return epslion / self.nearest_dist[0, 1]
 
     def calculate_hyperviscosity_weights(self):
@@ -814,8 +822,7 @@ class Node_Set:
             for idx, node_list_idx in enumerate(self.nearest_idx):
                 if (idx + 1) % int(self.nearest_idx.shape[0] / 10) == 0:
                     if not self.quiet:
-                        print ".",
-                        sys.stdout.flush()
+                        print(".")
                 # shift nodes to origin
                 node_list = self.full_node_set[node_list_idx]
                 node_list_shifted = node_list - node_list[0]
@@ -829,12 +836,12 @@ class Node_Set:
 
                 # fill normal A matrix
                 for node_idx, row_node in enumerate(node_list_shifted):
-                    r = np.sqrt(((node_list_shifted - row_node)**2).sum(
-                        axis=1))
+                    r = np.sqrt(
+                        ((node_list_shifted - row_node)**2).sum(axis=1))
                     # A_matrix
-                    A_matrix[node_idx, :
-                             self.stencil_size] = self.rbf_phi_gauss(
-                                 r, epslion)
+                    A_matrix[
+                        node_idx, :self.stencil_size] = self.rbf_phi_gauss(
+                            r, epslion)
 
                     # laplacian right hand side
                     hyperviscosity_rhs[node_idx] = epslion**(
@@ -846,17 +853,17 @@ class Node_Set:
                 try:
                     weights = np.linalg.solve(A_matrix, hyperviscosity_rhs)
                 except:
-                    print "Error in calculating weights"
-                    print cur_radius
-                    print matrix_size
-                    print self.stencil_size + num_poly_terms + self.exp_order
-                    print self.stencil_size + num_poly_terms
-                    print A_matrix
+                    print("Error in calculating weights")
+                    print(cur_radius)
+                    print(matrix_size)
+                    print(self.stencil_size + num_poly_terms + self.exp_order)
+                    print(self.stencil_size + num_poly_terms)
+                    print(A_matrix)
                     exit()
                 self.hyperviscosity_weights[
                     idx, :] = weights[:self.stencil_size]
             if not self.quiet:
-                print
+                print()
         self.hyperviscosity = self.create_operator_matrix(
             self.hyperviscosity_weights)
 
@@ -866,144 +873,148 @@ class Node_Set:
         sparsecols = row_col[1]
 
         if not self.quiet:
-            print "Saving operators"
+            print("Saving operators")
 
         file = h5py.File("nodes.h5", "w")
         # write node set
         grp_node_set = file.create_group("node_set")
-        dset = file.create_dataset(
-            "node_set/node_idx", (self.node_set.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("node_set/node_idx",
+                                   (self.node_set.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = np.arange(self.node_set.shape[0])
-        dset = file.create_dataset(
-            "node_set/x", (self.node_set.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("node_set/x", (self.node_set.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.node_set[:, 0]
-        dset = file.create_dataset(
-            "node_set/y", (self.node_set.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("node_set/y", (self.node_set.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.node_set[:, 1]
-        dset = file.create_dataset(
-            "node_set/z", (self.node_set.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("node_set/z", (self.node_set.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.node_set[:, 2]
-        dset = file.create_dataset(
-            "node_set/weights", (self.node_set.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("node_set/weights",
+                                   (self.node_set.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.weights
 
         grp_boundary_nodes = file.create_group("boundary_nodes")
-        dset = file.create_dataset(
-            "boundary_nodes/node_idx", (self.boundary_nodes.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("boundary_nodes/node_idx",
+                                   (self.boundary_nodes.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = np.arange(self.boundary_nodes.shape[0])
-        dset = file.create_dataset(
-            "boundary_nodes/x", (self.boundary_nodes.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("boundary_nodes/x",
+                                   (self.boundary_nodes.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.boundary_nodes[:, 0]
-        dset = file.create_dataset(
-            "boundary_nodes/y", (self.boundary_nodes.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("boundary_nodes/y",
+                                   (self.boundary_nodes.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.boundary_nodes[:, 1]
-        dset = file.create_dataset(
-            "boundary_nodes/z", (self.boundary_nodes.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("boundary_nodes/z",
+                                   (self.boundary_nodes.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.boundary_nodes[:, 2]
 
         grp_operators = file.create_group("operators")
-        dset = file.create_dataset(
-            "operators/row_idx", (sparserows.shape[0], ),
-            dtype='int32',
-            chunks=True)
+        dset = file.create_dataset("operators/row_idx",
+                                   (sparserows.shape[0], ),
+                                   dtype='int32',
+                                   chunks=True)
         dset[:] = sparserows
-        dset = file.create_dataset(
-            "operators/col_idx", (sparserows.shape[0], ),
-            dtype='int32',
-            chunks=True)
+        dset = file.create_dataset("operators/col_idx",
+                                   (sparserows.shape[0], ),
+                                   dtype='int32',
+                                   chunks=True)
         dset[:] = sparsecols
-        dset = file.create_dataset(
-            "operators/laplace", (sparserows.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("operators/laplace",
+                                   (sparserows.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.laplace[sparserows, sparsecols]
-        dset = file.create_dataset(
-            "operators/laplace_ecs_real", (sparserows.shape[0], ),
-            dtype='float64',
-            chunks=True)
-        dset[:] = np.array(
-            self.laplace_ecs[sparserows, sparsecols].real).reshape(
-                (sparserows.shape[0], ))
-        dset = file.create_dataset(
-            "operators/laplace_ecs_imag", (sparserows.shape[0], ),
-            dtype='float64',
-            chunks=True)
-        dset[:] = np.array(
-            self.laplace_ecs[sparserows, sparsecols].imag).reshape(
-                (sparserows.shape[0], ))
-        dset = file.create_dataset(
-            "operators/dx", (sparserows.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("operators/laplace_ecs_real",
+                                   (sparserows.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
+        dset[:] = np.array(self.laplace_ecs[sparserows,
+                                            sparsecols].real).reshape(
+                                                (sparserows.shape[0], ))
+        dset = file.create_dataset("operators/laplace_ecs_imag",
+                                   (sparserows.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
+        dset[:] = np.array(self.laplace_ecs[sparserows,
+                                            sparsecols].imag).reshape(
+                                                (sparserows.shape[0], ))
+        dset = file.create_dataset("operators/dx", (sparserows.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.first_deriviative[0][sparserows, sparsecols]
-        dset = file.create_dataset(
-            "operators/dy", (sparserows.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("operators/dy", (sparserows.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.first_deriviative[1][sparserows, sparsecols]
-        dset = file.create_dataset(
-            "operators/dz", (sparserows.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("operators/dz", (sparserows.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.first_deriviative[2][sparserows, sparsecols]
-        dset = file.create_dataset(
-            "operators/hyperviscosity", (sparserows.shape[0], ),
-            dtype='float64',
-            chunks=True)
+        dset = file.create_dataset("operators/hyperviscosity",
+                                   (sparserows.shape[0], ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.hyperviscosity[sparserows, sparsecols]
 
         grp_parameters = file.create_group("parameters")
-        dset = file.create_dataset(
-            "parameters/delta_r", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/delta_r", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.delta_r
-        dset = file.create_dataset(
-            "parameters/r_max", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/r_max", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.r_max
-        dset = file.create_dataset(
-            "parameters/ecs_size", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/ecs_size", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.ecs_size
-        dset = file.create_dataset(
-            "parameters/md_degree", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/md_degree", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.md_degree
-        dset = file.create_dataset(
-            "parameters/rbf_order", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/rbf_order", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.rbf_order
-        dset = file.create_dataset(
-            "parameters/poly_order", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/poly_order", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.poly_order
-        dset = file.create_dataset(
-            "parameters/exp_order", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/exp_order", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.exp_order
-        dset = file.create_dataset(
-            "parameters/stencil_size", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/stencil_size", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.stencil_size
-        dset = file.create_dataset(
-            "parameters/num_nodes", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/num_nodes", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = self.node_set.shape[0]
-        dset = file.create_dataset(
-            "parameters/num_operators", (1, ), dtype='float64', chunks=True)
+        dset = file.create_dataset("parameters/num_operators", (1, ),
+                                   dtype='float64',
+                                   chunks=True)
         dset[:] = sparserows.shape[0]
 
     def check_quality(self):
-        print "Calculating Quality of Node Set"
+        print("Calculating Quality of Node Set")
         max_x = np.zeros(self.num_nodes)
         max_y = np.zeros(self.num_nodes)
         max_z = np.zeros(self.num_nodes)
@@ -1013,8 +1024,9 @@ class Node_Set:
         z_offset = np.zeros(self.num_nodes)
         for idx, node_list_idx in enumerate(self.nearest_idx):
             node_list = np.transpose(
-                self.rotation_matrix_aline_z(self.theta[idx], self.phi[idx])
-                .dot(np.transpose(self.full_node_set[node_list_idx])))
+                self.rotation_matrix_aline_z(
+                    self.theta[idx], self.phi[idx]).dot(
+                        np.transpose(self.full_node_set[node_list_idx])))
             max_x[idx] = np.max(node_list[:, 0])
             min_x[idx] = np.min(node_list[:, 0])
             max_y[idx] = np.max(node_list[:, 1])
@@ -1045,21 +1057,21 @@ class Node_Set:
         y_avg_ratio = y_span / average_span
         z_avg_ratio = z_span / average_span
 
-        print
-        print "max ratio (xy, xz, yz):", xy_ratio.max(), xz_ratio.max(
-        ), yz_ratio.max()
-        print "min ratio (xy, xz, yz):", xy_ratio.min(), xz_ratio.min(
-        ), yz_ratio.min()
-        print "mean ratio (xy, xz, yz):", xy_ratio.mean(), xz_ratio.mean(
-        ), yz_ratio.mean()
-        print "radius of max ratio (xy, xz, yz):", np.sqrt(
-            (self.node_set[xy_ratio.argmax()]**2).sum()), np.sqrt(
-                (self.node_set[xz_ratio.argmax()]**2).sum()), np.sqrt(
-                    (self.node_set[yz_ratio.argmax()]**2).sum())
-        print "radius of min ratio (xy, xz, yz):", np.sqrt(
-            (self.node_set[xy_ratio.argmin()]**2).sum()), np.sqrt(
-                (self.node_set[xz_ratio.argmin()]**2).sum()), np.sqrt(
-                    (self.node_set[yz_ratio.argmin()]**2).sum())
+        print()
+        print("max ratio (xy, xz, yz):", xy_ratio.max(), xz_ratio.max(),
+              yz_ratio.max())
+        print("min ratio (xy, xz, yz):", xy_ratio.min(), xz_ratio.min(),
+              yz_ratio.min())
+        print("mean ratio (xy, xz, yz):", xy_ratio.mean(), xz_ratio.mean(),
+              yz_ratio.mean())
+        print("radius of max ratio (xy, xz, yz):",
+              np.sqrt((self.node_set[xy_ratio.argmax()]**2).sum()),
+              np.sqrt((self.node_set[xz_ratio.argmax()]**2).sum()),
+              np.sqrt((self.node_set[yz_ratio.argmax()]**2).sum()))
+        print("radius of min ratio (xy, xz, yz):",
+              np.sqrt((self.node_set[xy_ratio.argmin()]**2).sum()),
+              np.sqrt((self.node_set[xz_ratio.argmin()]**2).sum()),
+              np.sqrt((self.node_set[yz_ratio.argmin()]**2).sum()))
 
         # fig = plt.figure()
         # ax = fig.add_subplot(111)
@@ -1131,48 +1143,48 @@ class Node_Set:
         # plt.axis('equal')
         # plt.show()
 
-        print
-        print "max ratio from average span (x, y, z):", x_avg_ratio.max(
-        ), y_avg_ratio.max(), z_avg_ratio.max()
-        print "min ratio from average span (x, y, z):", x_avg_ratio.min(
-        ), y_avg_ratio.min(), z_avg_ratio.min()
-        print "mean ratio from average span (x, y, z):", x_avg_ratio.mean(
-        ), y_avg_ratio.mean(), z_avg_ratio.mean()
-        print "radius of max ratio from average span (x, y, z):", np.sqrt(
-            (self.node_set[x_avg_ratio.argmax()]**2).sum()), np.sqrt(
-                (self.node_set[z_avg_ratio.argmax()]**2).sum()), np.sqrt(
-                    (self.node_set[z_avg_ratio.argmax()]**2).sum())
-        print "radius of min ratio from average span (x, y, z):", np.sqrt(
-            (self.node_set[x_avg_ratio.argmin()]**2).sum()), np.sqrt(
-                (self.node_set[y_avg_ratio.argmin()]**2).sum()), np.sqrt(
-                    (self.node_set[z_avg_ratio.argmin()]**2).sum())
+        print()
+        print("max ratio from average span (x, y, z):", x_avg_ratio.max(),
+              y_avg_ratio.max(), z_avg_ratio.max())
+        print("min ratio from average span (x, y, z):", x_avg_ratio.min(),
+              y_avg_ratio.min(), z_avg_ratio.min())
+        print("mean ratio from average span (x, y, z):", x_avg_ratio.mean(),
+              y_avg_ratio.mean(), z_avg_ratio.mean())
+        print("radius of max ratio from average span (x, y, z):",
+              np.sqrt((self.node_set[x_avg_ratio.argmax()]**2).sum()),
+              np.sqrt((self.node_set[z_avg_ratio.argmax()]**2).sum()),
+              np.sqrt((self.node_set[z_avg_ratio.argmax()]**2).sum()))
+        print("radius of min ratio from average span (x, y, z):",
+              np.sqrt((self.node_set[x_avg_ratio.argmin()]**2).sum()),
+              np.sqrt((self.node_set[y_avg_ratio.argmin()]**2).sum()),
+              np.sqrt((self.node_set[z_avg_ratio.argmin()]**2).sum()))
 
-        print
-        print "max span (x, y, z):", x_span.max(), y_span.max(), z_span.max()
-        print "min span (x, y, z):", x_span.min(), y_span.min(), z_span.min()
-        print "mean span (x, y, z):", x_span.mean(), y_span.mean(
-        ), z_span.mean()
-        print "radius of max span (x, y, z)", np.sqrt(
-            (self.node_set[x_span.argmax()]**2).sum()), np.sqrt(
-                (self.node_set[y_span.argmax()]**2).sum()), np.sqrt(
-                    (self.node_set[z_span.argmax()]**2).sum())
-        print "radius of min span (x, y, z)", np.sqrt(
-            (self.node_set[x_span.argmin()]**2).sum()), np.sqrt(
-                (self.node_set[y_span.argmin()]**2).sum()), np.sqrt(
-                    (self.node_set[z_span.argmin()]**2).sum())
+        print()
+        print("max span (x, y, z):", x_span.max(), y_span.max(), z_span.max())
+        print("min span (x, y, z):", x_span.min(), y_span.min(), z_span.min())
+        print("mean span (x, y, z):", x_span.mean(), y_span.mean(),
+              z_span.mean())
+        print("radius of max span (x, y, z)",
+              np.sqrt((self.node_set[x_span.argmax()]**2).sum()),
+              np.sqrt((self.node_set[y_span.argmax()]**2).sum()),
+              np.sqrt((self.node_set[z_span.argmax()]**2).sum()))
+        print("radius of min span (x, y, z)",
+              np.sqrt((self.node_set[x_span.argmin()]**2).sum()),
+              np.sqrt((self.node_set[y_span.argmin()]**2).sum()),
+              np.sqrt((self.node_set[z_span.argmin()]**2).sum()))
 
-        print
-        print "max asymmetry (x, y, z):", x_asm_ratio.max(), y_asm_ratio.max(
-        ), z_asm_ratio.max()
-        print "min asymmetry (x, y, z):", x_asm_ratio.min(), y_asm_ratio.min(
-        ), z_asm_ratio.min()
-        print "mean asymmetry (x, y, z):", x_asm_ratio.mean(
-        ), y_asm_ratio.mean(), z_asm_ratio.mean()
-        print "radius of max asymmetry ratio (x, y, z)", np.sqrt(
-            (self.node_set[x_asm_ratio.argmax()]**2).sum()), np.sqrt(
-                (self.node_set[y_asm_ratio.argmax()]**2).sum()), np.sqrt(
-                    (self.node_set[z_asm_ratio.argmax()]**2).sum())
-        print "radius of min asymmetry ratio (x, y, z)", np.sqrt(
-            (self.node_set[x_asm_ratio.argmin()]**2).sum()), np.sqrt(
-                (self.node_set[y_asm_ratio.argmin()]**2).sum()), np.sqrt(
-                    (self.node_set[z_asm_ratio.argmin()]**2).sum())
+        print()
+        print("max asymmetry (x, y, z):", x_asm_ratio.max(), y_asm_ratio.max(),
+              z_asm_ratio.max())
+        print("min asymmetry (x, y, z):", x_asm_ratio.min(), y_asm_ratio.min(),
+              z_asm_ratio.min())
+        print("mean asymmetry (x, y, z):", x_asm_ratio.mean(),
+              y_asm_ratio.mean(), z_asm_ratio.mean())
+        print("radius of max asymmetry ratio (x, y, z)",
+              np.sqrt((self.node_set[x_asm_ratio.argmax()]**2).sum()),
+              np.sqrt((self.node_set[y_asm_ratio.argmax()]**2).sum()),
+              np.sqrt((self.node_set[z_asm_ratio.argmax()]**2).sum()))
+        print("radius of min asymmetry ratio (x, y, z)",
+              np.sqrt((self.node_set[x_asm_ratio.argmin()]**2).sum()),
+              np.sqrt((self.node_set[y_asm_ratio.argmin()]**2).sum()),
+              np.sqrt((self.node_set[z_asm_ratio.argmin()]**2).sum()))
