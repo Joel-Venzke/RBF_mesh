@@ -89,14 +89,15 @@ class Node_Set:
 
         if self.rbf_order < 3 or self.rbf_order % 2 != 1:
             exit("RBF order must be >3 and odd")
-        # self.create_node_set_cartesian()
+            
+        # generate node set
         self.create_node_set()
         self.full_node_set = np.concatenate(
             [self.node_set, self.boundary_nodes])
         self.full_node_set_ecs = np.concatenate(
             [self.node_set_ecs, self.boundary_nodes_ecs])
-        # used for testing only. do not uncomment
-        # self.full_node_set = self.node_set
+        
+        # get coordinates
         self.radius = np.sqrt((self.node_set**2).sum(axis=1))
         self.theta = np.angle(self.node_set[:, 2] + 1.0j *
                               np.sqrt((self.node_set[:, :2]**2).sum(axis=1)))
@@ -105,8 +106,14 @@ class Node_Set:
         if not self.quiet:
             print("Number of nodes:", self.num_nodes)
             print("Getting Nearest Neighbors")
+            
+        # get nearest neigbors of each node
         self.nearest_dist, self.nearest_idx = self.get_nearest_neighbors()
+        
+        # generate differential opperators
         self.calculate_operator_weights()
+        
+        # get hyperviscosity for time propagation
         self.calculate_hyperviscosity_weights()
         if save:
             self.save_node_set()
