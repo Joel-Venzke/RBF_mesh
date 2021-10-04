@@ -13,19 +13,6 @@ import h5py
 
 
 class Node_Set:
-    """
-    A class used to represent an Animal
-
-    ...
-
-    Attributes
-    ----------
-    TODO
-
-    Methods
-    -------
-    TODO
-    """
     def __init__(self,
                  r_max=100,
                  delta_r=0.5,
