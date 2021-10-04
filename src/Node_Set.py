@@ -153,8 +153,9 @@ class Node_Set:
         deflection: the magnitude of the rotation. For 0, no rotation; for 1, competely random
         rotation. Small deflection => small perturbation.
         randnums: 3 random numbers in the range [0, 1]. If `None`, they will be auto-generated.
+        
+        Code in this function is from http://www.realtimerendering.com/resources/GraphicsGems/gemsiii/rand_rotation.c
         """
-        # from http://www.realtimerendering.com/resources/GraphicsGems/gemsiii/rand_rotation.c
 
         if randnums is None:
             randnums = np.random.uniform(size=(3, ))
